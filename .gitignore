@@ -1,0 +1,11 @@
+# Ignore the local database
+*.db
+grc_data.db
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+
+# Ignore virtual environments
+venv/
+env/
