@@ -33,7 +33,7 @@ Built on a distributed **client-server architecture**, OpenGRC deploys lightweig
 
 ## 📸 Live Dashboard
 
-![Dashboard Preview](assets/dashboard.png)
+![Dashboard Preview](dashboard.png)
 
 *The dashboard auto-refreshes every 5 seconds, providing live insights into infrastructure compliance status and historical trends.*
 
