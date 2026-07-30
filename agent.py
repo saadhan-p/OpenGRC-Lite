@@ -1,18 +1,32 @@
 import requests
 import time
 import socket
-import random
+import subprocess
+import platform
 
 SERVER_URL = "http://127.0.0.1:5000/api/report"
 HOSTNAME = socket.gethostname()
 
 def check_firewall():
-    # Simulating a check. In real life, use subprocess to check 'ufw' status.
-    # 90% chance of pass, 10% chance of failure (to test the dashboard)
-    if random.random() > 0.1:
-        return "PASS", "Firewall is active and filtering traffic."
-    else:
-        return "FAIL", "CRITICAL: Firewall service is DOWN."
+    system = platform.system()
+    try:
+        if system == "Linux":
+            result = subprocess.run(["ufw", "status"], capture_output=True, text=True, timeout=5)
+            if "Status: active" in result.stdout:
+                return "PASS", "Firewall (ufw) is active."
+            return "FAIL", "CRITICAL: Firewall (ufw) is inactive."
+        elif system == "Windows":
+            result = subprocess.run(
+                ["netsh", "advfirewall", "show", "currentprofile"],
+                capture_output=True, text=True, timeout=5
+            )
+            if "State                                 ON" in result.stdout:
+                return "PASS", "Windows Firewall is active."
+            return "FAIL", "CRITICAL: Windows Firewall is off."
+        else:
+            return "WARNING", f"No firewall check implemented for {system}."
+    except Exception as e:
+        return "WARNING", f"Could not determine firewall status: {e}"
 
 def check_password_policy():
     return "PASS", "Password complexity requirements met."
