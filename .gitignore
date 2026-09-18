@@ -1,11 +1,18 @@
 # Ignore the local database
 *.db
 grc_data.db
+instance/
+
+# Ignore local secrets and runtime credentials
+agent_credentials.json
+.env
+*.env
 
 # Ignore Python cache and compiled files
 __pycache__/
 *.pyc
 
 # Ignore virtual environments
+.venv/
 venv/
 env/
