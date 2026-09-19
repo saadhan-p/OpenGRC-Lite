@@ -82,22 +82,35 @@ def generate_token():
 @agent_bp.route('/report', methods=['POST'])
 @require_agent_auth
 def report_status():
-    """Protected Endpoint: Receives HMAC-signed telemetry reports from agents."""
+    """Protected Endpoint: Receives HMAC-signed telemetry reports (batch or single) from agents."""
     data = request.get_json(silent=True)
 
-    if not data or not REQUIRED_REPORT_FIELDS.issubset(data.keys()):
-        return jsonify({"error": "Invalid payload: missing required fields"}), 400
+    if not data:
+        return jsonify({"error": "Invalid payload: empty or non-JSON body"}), 400
 
-    if data["status"] not in ("PASS", "FAIL", "WARNING"):
-        return jsonify({"error": "Invalid status value"}), 400
+    items = data if isinstance(data, list) else [data]
+    logs_created = 0
 
-    new_log = AuditLog(
-        hostname=data['hostname'],
-        control_id=data['control_id'],
-        status=data['status'],
-        details=data['details']
-    )
-    db.session.add(new_log)
+    for item in items:
+        if not REQUIRED_REPORT_FIELDS.issubset(item.keys()):
+            continue
+        if item["status"] not in ("PASS", "FAIL", "WARNING"):
+            continue
+
+        new_log = AuditLog(
+            hostname=item['hostname'],
+            control_id=item['control_id'],
+            status=item['status'],
+            details=item['details'],
+            evidence_hash=item.get('evidence_hash')
+        )
+        db.session.add(new_log)
+        logs_created += 1
+
     db.session.commit()
 
-    return jsonify({"message": "Authenticated Report Received"}), 200
+    return jsonify({
+        "status": "success",
+        "message": f"Ingested {logs_created} authenticated telemetry report(s)",
+        "count": logs_created
+    }), 200

@@ -1,29 +1,56 @@
 import os
+from agent.plugins.base import BasePlugin
 
-def check_ssh_config():
-    config_path = "/etc/ssh/sshd_config"
-    if not os.path.exists(config_path):
-        return "WARNING", "SSH configuration file not found."
+class SSHHardeningPlugin(BasePlugin):
+    check_id = "SSH_HARDENING"
+    name = "SSH Remote Access Hardening"
 
-    try:
-        with open(config_path, "r") as f:
-            lines = f.readlines()
+    def run(self) -> dict:
+        config_path = "/etc/ssh/sshd_config"
+        raw_evidence = {"config_path": config_path, "exists": os.path.exists(config_path)}
 
-        permit_root = True
-        password_auth = True
+        if not os.path.exists(config_path):
+            return {
+                "check_id": self.check_id,
+                "status": "PASS",
+                "details": "SSH service config not present (SSH daemon disabled).",
+                "raw_evidence": raw_evidence,
+                "evidence_hash": self.compute_evidence_hash(raw_evidence)
+            }
 
-        for line in lines:
-            line = line.strip()
-            if line.startswith("#"):
-                continue
-            if "PermitRootLogin no" in line:
-                permit_root = False
-            if "PasswordAuthentication no" in line:
-                password_auth = False
+        try:
+            with open(config_path, "r") as f:
+                lines = f.readlines()
 
-        if not permit_root and not password_auth:
-            return "PASS", "SSH hardened: Root login and Password Auth disabled."
-        else:
-            return "FAIL", f"SSH hardening incomplete (RootLogin: {permit_root}, PasswordAuth: {password_auth})."
-    except Exception as e:
-        return "WARNING", f"Could not read SSH config: {e}"
+            permit_root = True
+            password_auth = True
+
+            for line in lines:
+                line = line.strip()
+                if line.startswith("#"):
+                    continue
+                if "PermitRootLogin no" in line:
+                    permit_root = False
+                if "PasswordAuthentication no" in line:
+                    password_auth = False
+
+            raw_evidence["PermitRootLogin_Disabled"] = not permit_root
+            raw_evidence["PasswordAuthentication_Disabled"] = not password_auth
+
+            if not permit_root and not password_auth:
+                status, details = "PASS", "SSH hardened: Root login and Password Auth disabled."
+            else:
+                status, details = "FAIL", f"SSH hardening incomplete (PermitRootLogin: {permit_root}, PasswordAuth: {password_auth})."
+
+        except Exception as e:
+            status = "WARNING"
+            details = f"Could not read SSH config: {e}"
+            raw_evidence["error"] = str(e)
+
+        return {
+            "check_id": self.check_id,
+            "status": status,
+            "details": details,
+            "raw_evidence": raw_evidence,
+            "evidence_hash": self.compute_evidence_hash(raw_evidence)
+        }

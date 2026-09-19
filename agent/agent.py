@@ -5,11 +5,21 @@ import hmac
 import hashlib
 import requests
 from agent.config import HOSTNAME, POLL_INTERVAL_SECONDS
-from agent.plugins.firewall import check_firewall
+from agent.plugins.firewall import FirewallPlugin
+from agent.plugins.encryption import DiskEncryptionPlugin
+from agent.plugins.ssh import SSHHardeningPlugin
+from agent.plugins.edr import EDRCheckPlugin
 
 CONFIG_FILE = "agent_credentials.json"
 ENROLL_URL = "http://127.0.0.1:5000/api/v1/agent/enroll"
 REPORT_URL = "http://127.0.0.1:5000/api/v1/agent/report"
+
+PLUGINS = [
+    FirewallPlugin(),
+    DiskEncryptionPlugin(),
+    SSHHardeningPlugin(),
+    EDRCheckPlugin()
+]
 
 
 def load_or_enroll_credentials():
@@ -19,7 +29,7 @@ def load_or_enroll_credentials():
             data = json.load(f)
             return data.get("api_key")
 
-    print(f"[*] Agent not enrolled. Initializing handshake with {ENROLL_URL}...")
+    print(f"[*] Agent 2.0 not enrolled. Initializing handshake with {ENROLL_URL}...")
     enrollment_token = input("Enter Enrollment Token: ").strip()
 
     payload = {
@@ -48,18 +58,29 @@ def compute_hmac_signature(payload_bytes: bytes, timestamp_str: str, api_key: st
 
 def run_agent():
     api_key = load_or_enroll_credentials()
-    print(f"[*] Authenticated Agent running on {HOSTNAME}...")
+    print(f"[*] Agent 2.0 Modular Collector active on host '{HOSTNAME}' ({len(PLUGINS)} plugins loaded)...")
 
     while True:
-        fw_status, fw_msg = check_firewall()
-        payload = {
-            "hostname": HOSTNAME,
-            "control_id": "A.13.1 (Network)",
-            "status": fw_status,
-            "details": fw_msg
-        }
+        batch_telemetry = []
 
-        payload_bytes = json.dumps(payload).encode('utf-8')
+        # Run each system plugin
+        for plugin in PLUGINS:
+            try:
+                res = plugin.run()
+                batch_telemetry.append({
+                    "hostname": HOSTNAME,
+                    "control_id": res["check_id"],
+                    "status": res["status"],
+                    "details": res["details"],
+                    "evidence_hash": res["evidence_hash"],
+                    "raw_evidence": res.get("raw_evidence")
+                })
+                print(f"  [>] {res['check_id']} -> {res['status']}: {res['details']}")
+            except Exception as e:
+                print(f"  [!] Plugin {plugin.check_id} failed execution: {e}")
+
+        # Package batch payload and sign with HMAC-SHA256
+        payload_bytes = json.dumps(batch_telemetry).encode('utf-8')
         timestamp_str = str(time.time())
         signature = compute_hmac_signature(payload_bytes, timestamp_str, api_key)
 
@@ -72,9 +93,9 @@ def run_agent():
 
         try:
             res = requests.post(REPORT_URL, data=payload_bytes, headers=headers)
-            print(f"[+] Report Status {res.status_code}: {res.text}")
+            print(f"[+] Transmitted {len(batch_telemetry)} telemetry check(s) | Status {res.status_code}: {res.text}")
         except Exception as e:
-            print(f"[-] Request failed: {e}")
+            print(f"[-] Network error transmitting telemetry: {e}")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 
