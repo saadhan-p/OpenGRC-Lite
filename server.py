@@ -5,6 +5,8 @@ from app.models import db
 from app.api.agent import agent_bp
 from app.api.dashboard import dashboard_bp
 from app.api.reports import reports_bp
+from app.api.compliance import compliance_bp
+from app.seeds.frameworks_seed import seed_frameworks_and_controls
 
 def create_app():
     app = Flask(__name__)
@@ -16,9 +18,11 @@ def create_app():
     app.register_blueprint(agent_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(compliance_bp)
 
     with app.app_context():
         db.create_all()
+        seed_frameworks_and_controls()
 
     return app
 
